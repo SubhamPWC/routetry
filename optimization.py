@@ -29,6 +29,8 @@ DEFAULT_SPEED_KPH_BY_HIGHWAY = {
     "tertiary_link": 30,
 }
 
+EPS = 1e-6  # strictly positive lower bound for edge weights
+
 def load_graph(origin: Tuple[float, float], dest: Tuple[float, float], use_offline_demo: bool=False):
     """Load a road network graph. If offline demo, return a small synthetic graph.
     Otherwise use OSMnx to fetch graph for a bbox around origin & dest.
@@ -132,6 +134,10 @@ def _edge_speed_kph(data, speed_model=None):
 
 def _edge_weight(data, fuel_price_inr_per_l, fuel_consumption_l_per_100km, emission_factor_g_co2_per_km,
                  prefer_highways, avoid_bridges_flyovers, speed_model):
+    """Return a strictly non-negative edge weight.
+    We use a base positive cost (time + scaled distance + scaled cost + scaled emissions),
+    then apply multiplicative adjustments for preferences to avoid negative weights.
+    """
     highway = data.get('highway')
     if isinstance(highway, list):
         highway = highway[0]
@@ -141,9 +147,16 @@ def _edge_weight(data, fuel_price_inr_per_l, fuel_consumption_l_per_100km, emiss
     travel_time_min = (length_m/1000.0) / max(5.0, speed_kph) * 60.0
     cost_inr = (length_m/1000.0) * (fuel_consumption_l_per_100km/100.0) * fuel_price_inr_per_l
     emissions_kg = (length_m/1000.0) * (emission_factor_g_co2_per_km/1000.0)
-    highway_bonus = -0.02*length_m if (prefer_highways and highway in ["motorway", "trunk"]) else 0.0
-    bridge_penalty = 0.05*length_m if (avoid_bridges_flyovers and is_bridge) else 0.0
-    return travel_time_min + 0.001*length_m + 0.0002*cost_inr + 0.0002*emissions_kg + highway_bonus + bridge_penalty
+
+    base_weight = travel_time_min + 0.001*length_m + 0.0002*cost_inr + 0.0002*emissions_kg
+
+    # multiplicative preferences (keep weight >= 0)
+    if prefer_highways and highway in ["motorway", "trunk"]:
+        base_weight *= 0.97  # 3% preference
+    if avoid_bridges_flyovers and is_bridge:
+        base_weight *= 1.10  # 10% penalty
+
+    return max(base_weight, EPS)
 
 def _collapse_to_digraph(G_multi: nx.MultiDiGraph, weight_func) -> nx.DiGraph:
     """Collapse a MultiDiGraph to a DiGraph by selecting the best parallel edge per (u,v)
