@@ -86,29 +86,38 @@ with col1:
 with col2:
     st.subheader("📋 Route Alternatives")
     st.write("**Decision tag:**", decision_tag)
-    st.dataframe(
-        df_routes[[
-            "route_id",
-            "optimized",
-            "total_distance_km",
-            "total_time_min",
-            "total_cost_inr",
-            "total_emissions_kg",
-            "num_segments",
-            "highway_share_pct",
-            "has_flyover",
-            "dominance_rank",
-        ]].style.highlight_max(subset=["total_distance_km", "total_time_min", "total_cost_inr", "total_emissions_kg"], color="#ffe0e0")
-    )
+    if df_routes is not None and len(df_routes) > 0:
+        st.dataframe(
+            df_routes[[
+                "route_id",
+                "optimized",
+                "total_distance_km",
+                "total_time_min",
+                "total_cost_inr",
+                "total_emissions_kg",
+                "num_segments",
+                "highway_share_pct",
+                "has_flyover",
+                "dominance_rank",
+            ]].style.highlight_max(subset=["total_distance_km", "total_time_min", "total_cost_inr", "total_emissions_kg"], color="#ffe0e0")
+        )
 
-    csv_data = df_routes.to_csv(index=False).encode("utf-8")
-    st.download_button("⬇️ Download routes CSV", csv_data, file_name="routes_{}_to_{}.csv".format(origin_name, dest_name), mime="text/csv")
+        csv_data = df_routes.to_csv(index=False).encode("utf-8")
+        st.download_button("⬇️ Download routes CSV", csv_data, file_name="routes_{}_to_{}.csv".format(origin_name, dest_name), mime="text/csv")
+    else:
+        st.info("No routes found for the selected inputs. Try increasing k or changing preferences.")
 
 # Show detailed segment table for the recommended route
 st.subheader("🔎 Recommended Route Details")
-rec_route = routes[recommended_idx]
-seg_df = pd.DataFrame(rec_route["segments"])  # list of dict per edge
-st.dataframe(seg_df[["name", "highway", "length_m", "maxspeed_kph", "is_flyover", "travel_time_min"]])
+if routes and len(routes) > 0:
+    rec_route = routes[recommended_idx]
+    seg_df = pd.DataFrame(rec_route["segments"])  # list of dict per edge
+    if not seg_df.empty:
+        st.dataframe(seg_df[["name", "highway", "length_m", "maxspeed_kph", "is_flyover", "travel_time_min"]])
+    else:
+        st.info("No segment details available.")
+else:
+    st.info("No recommended route.")
 
 # Footer info
 with st.expander("ℹ️ Notes"):
